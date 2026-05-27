@@ -70,6 +70,90 @@ internal `edamame_app/.cursor/rules/workspace.mdc` "Supply-chain
 hardening (MUST follow)" section. This README is intentionally scoped
 to the public-facing surface.
 
+## Threat model
+
+Each gate in this policy maps to a specific attack class. None of them
+overlaps with another -- removing any one of them leaves a corresponding
+class of attack undefended.
+
+### 1. Same-day malicious upload (xz-utils class)
+
+> *An attacker compromises a maintainer's crates.io account and ships a
+> backdoored version. Anyone who runs `cargo update` in the next hours
+> pulls it.*
+
+**Defended by `renovate-base.json::minimumReleaseAge: "7 days"`.**
+Renovate will not even open a PR for a new upstream version until 7
+days after upload. By then RustSec or community detection typically
+yanks/flags it; on day 7 the `cargo deny check advisories` gate
+blocks the merge. cargo-deny alone cannot defend against this --
+RustSec entries appear in the DB after detection, not at upload time.
+
+### 2. Tag-rewrite attacks on GitHub Actions
+
+> *An attacker (or compromised maintainer) force-pushes a malicious
+> commit to an existing `@v4` tag of a popular GitHub Action. Workflows
+> that reference the tag pull the malicious code with their normal
+> permissions on the next run.*
+
+**Defended by `renovate-base.json::pinDigests: true`** for the
+`github-actions` manager. Tag references in `.github/workflows/*.yml`
+are rewritten to immutable commit SHAs. When the maintainer ships a
+real new version, Renovate opens a PR to bump the SHA, operator-reviewable.
+
+### 3. Yanked / known-CVE / banned-license / banned-source slipping into the lockfile
+
+> *An existing transitive dependency drifts into a yanked version (the
+> upstream maintainer pulled it for a reason), or a CVE is published
+> against a version we already ship, or a transitive dep changes
+> license to something we cannot redistribute, or a fork appears under
+> a non-allowlisted git origin.*
+
+**Defended by `deny.toml::advisories.{vulnerability, yanked} = "deny"`,
+`deny.toml::licenses.allow` allow-list, `deny.toml::sources.unknown-registry = "deny"`,
+`deny.toml::sources.allow-git` allow-list.** Per-repo `audit.yml`
+runs `cargo-deny --all-features check {advisories,licenses,bans,sources}`
+on every push and PR plus a daily 04:00 UTC cron, so a regression
+is caught within at most 24h regardless of dev activity.
+
+### 4. Drift / latent CVE accumulation
+
+> *Without routine bumps, dep versions drift months behind upstream.
+> When a critical CVE drops in `tokio` or `hyper`, the security patch
+> requires a multi-major-version migration that takes weeks under
+> time pressure.*
+
+**Defended by `renovate-base.json` weekly schedule + grouping.**
+Renovate proposes minor + patch bumps grouped into one PR per repo
+per week (`groupName: "rust-deps-weekly"`). Versions stay within
+~2 weeks of upstream, so any future security bump is a small,
+reviewable diff instead of an emergency refactor. Vulnerability
+alerts get an emergency lane (`vulnerabilityAlerts` block, no delay).
+
+### 5. Out-of-band edits to the per-repo policy mirror
+
+> *A contributor with write access to a Rust repo edits the local
+> `deny.toml` to suppress a real CVE and ships, bypassing the
+> centralized policy.*
+
+**Defended by `audit.yml.template::drift-check`** -- a daily CI job
+that fetches `deny.toml` from this repo at `main` and `diff -u`'s it
+against the per-repo copy. Any out-of-band edit fails the build.
+The drift-check needs no PAT because this repo is public.
+
+### What is NOT yet defended
+
+* **Provenance / human review of upstream code.** No one on the
+  EDAMAME team has read the source of every transitive dep we ship.
+  This is what `cargo-vet` is designed to address (Phase 3,
+  not yet adopted).
+* **Build reproducibility / SBOM.** Releases do not yet carry a
+  signed SBOM listing exact bytes. Planned for `release_all.sh`
+  Phase 1 integration.
+
+These are documented as known gaps so external auditors do not
+mistake the current policy for a complete supply-chain story.
+
 ## Editing the policy
 
 ```bash
