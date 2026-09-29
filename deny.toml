@@ -11,7 +11,9 @@
 # Policy summary (see ./README.md for rationale):
 #   * advisories.vulnerability  = deny      (RustSec CVEs MUST fail CI)
 #   * advisories.yanked         = deny      (yanked versions MUST fail CI)
-#   * advisories.unmaintained   = warn      (triage, do not gate)
+#   * unmaintained advisories   = deny      (cargo-deny 0.18+ has no warn level
+#                                            for them: each one is replaced or
+#                                            ignored below with its replacement)
 #   * licenses.allow            = explicit  (anything else fails)
 #   * bans.multiple-versions    = warn      (visibility, not gate)
 #   * bans.wildcards            = warn      (real `foo = "*"` flagged; git-only

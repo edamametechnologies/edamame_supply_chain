@@ -36,7 +36,9 @@ Hard gates wired into every Rust repo's CI (`.github/workflows/audit.yml`):
   dependency fails the build.
 * **`advisories.yanked = deny`** -- a yanked version in the lockfile fails
   the build.
-* **`advisories.unmaintained = warn`** -- triage backlog, does not gate.
+* **Unmaintained advisories fail the build too** (cargo-deny 0.18+ has no
+  `warn` level for them) -- each one is either replaced or listed in
+  `[advisories.ignore]` with the crate to migrate to.
 * **`licenses`** -- explicit allow-list. Anything outside it fails.
 * **`bans.multiple-versions = warn`** -- visibility, does not gate.
 * **`bans.wildcards = warn`** with `allow-wildcard-paths = true` -- real
